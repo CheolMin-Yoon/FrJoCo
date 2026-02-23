@@ -94,10 +94,13 @@ void WholeBodyIK::compute(const pinocchio::Model& model,
     dx_err_.segment<3>(12) = orientationError(lf_ori_des, lf_ori_curr);
 
     // ── 3. 자코비안 스택 ──
-    // CoM 자코비안 (3 × nv)
-    Eigen::MatrixXd J_com = Eigen::MatrixXd::Zero(3, nv_);
+    // CoM 자코비안 (3 × nv) — 내부적으로 joint jacobians도 계산
     pinocchio::jacobianCenterOfMass(model, data, q_curr, false);
-    J_com = data.Jcom;
+    Eigen::MatrixXd J_com = data.Jcom;
+
+    // joint jacobians 명시적 계산 (getFrameJacobian 전제조건)
+    pinocchio::computeJointJacobians(model, data, q_curr);
+    pinocchio::updateFramePlacements(model, data);
 
     // 오른발 자코비안 (6 × nv)
     Eigen::MatrixXd J_rf = Eigen::MatrixXd::Zero(6, nv_);
@@ -118,7 +121,7 @@ void WholeBodyIK::compute(const pinocchio::Model& model,
     constexpr int task_dim = 15;
     Eigen::MatrixXd JJt = J_stack_ * J_stack_.transpose()
                          + damping_ * Eigen::MatrixXd::Identity(task_dim, task_dim);
-    Eigen::VectorXd dx_rate = dx_err_ / dt_;  // 오차를 속도로 변환
+    Eigen::VectorXd dx_rate = dx_err_ * (IK_TASK_GAIN / dt_);  // 오차를 속도로 변환 (gain 적용)
 
     // feedforward velocity 추가 (궤적의 해석적 미분값)
     dx_rate.segment<3>(3) += rf_vel_ff;   // 오른발 선속도
@@ -126,21 +129,18 @@ void WholeBodyIK::compute(const pinocchio::Model& model,
 
     v_des_ = J_stack_.transpose() * JJt.ldlt().solve(dx_rate);
 
-    // v_des 클램핑 (actuated joints만, floating base 6DoF는 제외)
-    for (int i = 6; i < v_des_.size(); ++i)
+    // v_des 클램핑 (전체, floating base 포함)
+    for (int i = 0; i < v_des_.size(); ++i)
         v_des_(i) = std::clamp(v_des_(i), -IK_V_MAX, IK_V_MAX);
 
-    // ── 5. 관절 적분 (q_des = q_curr ⊕ v_des * dt) ──
-    // floating base: 위치는 단순 덧셈, 쿼터니언은 exponential map
-    q_des_ = q_curr;
-
+    // ── 5. 관절 적분 (q_des ⊕= v_des * dt) ──
     // floating base 위치 (0:3)
     q_des_.head<3>() += v_des_.head<3>() * dt_;
 
     // floating base 자세 (quaternion, q[3:7], v[3:6])
     Eigen::Vector3d omega_dt = v_des_.segment<3>(3) * dt_;
     double angle = omega_dt.norm();
-    Eigen::Quaterniond q_fb(q_curr(6), q_curr(3), q_curr(4), q_curr(5)); // x,y,z,w → Eigen w,x,y,z
+    Eigen::Quaterniond q_fb(q_des_(6), q_des_(3), q_des_(4), q_des_(5)); // xyzw → Eigen wxyz
     if (angle > 1e-10) {
         Eigen::Vector3d axis = omega_dt / angle;
         Eigen::Quaterniond dq_rot(Eigen::AngleAxisd(angle, axis));

@@ -46,11 +46,14 @@ constexpr double MPC_GAMMA      = 1.0;    // ZMP 추종 페널티
 // ============================================================
 // IK PD 게인 (actuated joints)
 // 감쇠비 1일 때 300 - 35, 200 - 28.5, 100 - 20, 75 - 17.5
-constexpr double IK_KP          = 300.0;
-constexpr double IK_KD          = 35.0;
+constexpr double IK_KP          = 100.0;
+constexpr double IK_KD          = 20.0;
 
 // IK damped pseudo-inverse 정규화
 constexpr double IK_DAMPING     = 1e-2;
+
+// IK task 수렴 게인 (0 < k_task ≤ 1, 1이면 1스텝에 오차 제거)
+constexpr double IK_TASK_GAIN   = 0.5;
 
 // IK 관절 속도 클램핑 (rad/s)
 constexpr double IK_V_MAX       = 30.0;

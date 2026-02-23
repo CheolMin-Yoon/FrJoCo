@@ -6,8 +6,8 @@ set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ── conda 환경 경로 ──
-set(CONDA_ENV "/home/frlab/anaconda3/envs/frmoco")
-set(MUJOCO_ROOT "${CONDA_ENV}/lib/python3.12/site-packages/mujoco")
+set(CONDA_ENV "/home/ycm/anaconda3/envs/frjoco")
+set(MUJOCO_ROOT "${CONDA_ENV}/lib/python3.13/site-packages/mujoco")
 
 # ── Eigen ──
 find_package(Eigen3 REQUIRED)
@@ -26,6 +26,9 @@ if(NOT TARGET Qhull::qhullcpp)
     endif()
 endif()
 
+# ── Simde (proxsuite dependency) ──
+set(Simde_INCLUDE_DIR "${CONDA_ENV}/include")
+
 # ── ProxSuite ──
 find_package(proxsuite REQUIRED
     PATHS "${CONDA_ENV}/lib/cmake/proxsuite" NO_DEFAULT_PATH)
@@ -34,13 +37,12 @@ find_package(proxsuite REQUIRED
 set(MUJOCO_INCLUDE "${MUJOCO_ROOT}/include")
 set(MUJOCO_LIB     "${MUJOCO_ROOT}/libmujoco.so.3.5.0")
 
-# ── GLFW (시스템 직접 지정) ──
-set(GLFW_INCLUDE_DIR /usr/include)
-set(GLFW_LIBRARY /usr/lib/x86_64-linux-gnu/libglfw.so)
+# ── GLFW ──
+set(GLFW_INCLUDE_DIR "${CONDA_ENV}/include")
+set(GLFW_LIBRARY "${CONDA_ENV}/lib/libglfw.so")
 
-# ── 소스 파일 ──
-set(SOURCES
-    main.cpp
+# ── 소스 파일 (공통) ──
+set(COMMON_SOURCES
     src/trajectory_planner/zmp_trajectory.cpp
     src/trajectory_planner/foot_trajectory.cpp
     src/controller/LIPM_LQR.cpp
@@ -60,19 +62,21 @@ set(SOURCES
     src/constraints/task_space.cpp
 )
 
-add_executable(main ${SOURCES})
+add_executable(main main.cpp ${COMMON_SOURCES})
+add_executable(main_push_test main_push_test.cpp ${COMMON_SOURCES})
 
-target_include_directories(main PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${MUJOCO_INCLUDE}
-    ${GLFW_INCLUDE_DIR}
-    ${EIGEN3_INCLUDE_DIR}
-)
-
-target_link_libraries(main
-    pinocchio::pinocchio
-    proxsuite::proxsuite
-    ${MUJOCO_LIB}
-    ${GLFW_LIBRARY}
-    dl
-)
+foreach(TARGET main main_push_test)
+    target_include_directories(${TARGET} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${MUJOCO_INCLUDE}
+        ${GLFW_INCLUDE_DIR}
+        ${EIGEN3_INCLUDE_DIR}
+    )
+    target_link_libraries(${TARGET}
+        pinocchio::pinocchio
+        proxsuite::proxsuite
+        ${MUJOCO_LIB}
+        ${GLFW_LIBRARY}
+        dl
+    )
+endforeach()

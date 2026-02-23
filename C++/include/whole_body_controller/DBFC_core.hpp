@@ -3,6 +3,7 @@
 #include <Eigen/Dense>
 #include <pinocchio/multibody/model.hpp>
 #include <pinocchio/multibody/data.hpp>
+#include <pinocchio/algorithm/center-of-mass.hpp>
 
 #include "config.hpp"
 #include "dynamics_model/com_dynamics.hpp"
@@ -26,7 +27,7 @@
 
 class WBC {
 public:
-    WBC(int nv = 29, int na = 23, int nc = 12);
+    WBC(const pinocchio::Model& model, int nv = 29, int na = 23, int nc = 12);
 
     // ── IK 모드 (경로 A) ──
     // MPC에서 나온 목표 CoM + 발 궤적 → IK → PD 토크

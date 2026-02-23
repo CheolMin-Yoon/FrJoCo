@@ -18,6 +18,7 @@ G1WalkingController::G1WalkingController(const pinocchio::Model& model,
       fric_cone_(FRICTION_MU),
       cop_limits_(0.05, -0.05, 0.02, -0.02),
       balance_task_(BAL_KP, BAL_KD),
+      com_dynamics_(pinocchio::computeTotalMass(model), GRAVITY),
       traj_idx_(0),
       total_mass_(pinocchio::computeTotalMass(model))
 {
@@ -154,34 +155,26 @@ Eigen::VectorXd G1WalkingController::wbcLoop(
     // 접촉 상태 판별
     Eigen::Vector2d contact = getContactState(sim_time);
 
-    // SRBD 매핑: K·F = [m·ddx, m·ddy, m·(ddz+g), 0, 0, 0]
-    // 결정변수: F = [Fx_R, Fy_R, Fz_R, Mx_R, My_R, Mz_R,
-    //               Fx_L, Fy_L, Fz_L, Mx_L, My_L, Mz_L]
-    // K (6×12): 힘 부분만 단위행렬, 모멘트는 0
-    Eigen::MatrixXd K = Eigen::MatrixXd::Zero(6, 12);
-    // 오른발 힘 → wrench
-    K(0, 0) = 1.0; K(1, 1) = 1.0; K(2, 2) = 1.0;  // Fx,Fy,Fz
-    // 왼발 힘 → wrench
-    K(0, 6) = 1.0; K(1, 7) = 1.0; K(2, 8) = 1.0;
-
-    // 원하는 wrench: u = [m*(ddx_mpc + ddx_pd), m*(ddy_mpc + ddy_pd), m*g, 0, 0, 0]
     // BalanceTask: CoM PD 보정 (MPC 사이 구간 오차 보상)
     Eigen::Vector3d com_curr = data.com[0];
     Eigen::Vector3d com_dot_curr = data.vcom[0];
     Eigen::Vector3d com_dot_des(x_state_(1), y_state_(1), 0.0);
     balance_task_.update(com_curr, com_dot_curr, com_des, com_dot_des);
-    Eigen::Vector3d ddc_pd = balance_task_.getTaskCommand();  // PD 보정 가속도
+    Eigen::Vector3d ddc_pd = balance_task_.getTaskCommand();
 
-    Eigen::VectorXd u_des(6);
-    u_des(0) = total_mass_ * (x_state_(2) + ddc_pd(0));  // m * (ddx_mpc + ddx_pd)
-    u_des(1) = total_mass_ * (y_state_(2) + ddc_pd(1));  // m * (ddy_mpc + ddy_pd)
-    u_des(2) = total_mass_ * GRAVITY;                     // m * g (수직 지지)
-    u_des(3) = 0.0; u_des(4) = 0.0; u_des(5) = 0.0;
+    // MPC 피드포워드 + PD 보정 합산
+    Eigen::Vector3d ddc_des(x_state_(2) + ddc_pd(0),
+                            y_state_(2) + ddc_pd(1),
+                            ddc_pd(2));
 
-    // regularization
+    // com_dynamics로 K(6×12), u(6×1) 구성 — 모멘트 항 포함
+    Eigen::Vector3d rf_pos_curr = data.oMf[rf_frame_id].translation();
+    Eigen::Vector3d lf_pos_curr = data.oMf[lf_frame_id].translation();
+    Eigen::Vector3d dL = Eigen::Vector3d::Zero();
+    com_dynamics_.updateDynamics(com_curr, lf_pos_curr, rf_pos_curr, ddc_des, dL);
+
     Eigen::MatrixXd W = Eigen::MatrixXd::Identity(12, 12) * FORCE_OPT_REG;
-
-    force_opt_.updateObjective(K, u_des, W);
+    force_opt_.updateObjective(com_dynamics_.getK(), com_dynamics_.getU(), W);
 
     // 제약 조건 조립: 마찰원뿔(10행) + CoP(8행) = 18행
     Eigen::MatrixXd A_fric; Eigen::VectorXd l_fric, u_fric;
@@ -321,24 +314,20 @@ Eigen::VectorXd G1WalkingController::standingLoop(
     Eigen::VectorXd tau_fb = ik_.computePDTorque(q, dq);
 
     // ── (2) ForceOptimizer: 양발 접촉, 중력 지지만 ──
-    Eigen::MatrixXd K = Eigen::MatrixXd::Zero(6, 12);
-    K(0, 0) = 1.0; K(1, 1) = 1.0; K(2, 2) = 1.0;
-    K(0, 6) = 1.0; K(1, 7) = 1.0; K(2, 8) = 1.0;
-
     // BalanceTask PD 보정
     Eigen::Vector3d com_curr = data.com[0];
     Eigen::Vector3d com_dot_curr = data.vcom[0];
     balance_task_.update(com_curr, com_dot_curr, init_com_, Eigen::Vector3d::Zero());
     Eigen::Vector3d ddc_pd = balance_task_.getTaskCommand();
 
-    Eigen::VectorXd u_des(6);
-    u_des(0) = total_mass_ * ddc_pd(0);
-    u_des(1) = total_mass_ * ddc_pd(1);
-    u_des(2) = total_mass_ * GRAVITY;
-    u_des(3) = 0.0; u_des(4) = 0.0; u_des(5) = 0.0;
+    // com_dynamics로 K(6×12), u(6×1) 구성 — 모멘트 항 포함
+    Eigen::Vector3d rf_pos_curr = data.oMf[rf_frame_id].translation();
+    Eigen::Vector3d lf_pos_curr = data.oMf[lf_frame_id].translation();
+    Eigen::Vector3d dL = Eigen::Vector3d::Zero();
+    com_dynamics_.updateDynamics(com_curr, lf_pos_curr, rf_pos_curr, ddc_pd, dL);
 
     Eigen::MatrixXd W = Eigen::MatrixXd::Identity(12, 12) * FORCE_OPT_REG;
-    force_opt_.updateObjective(K, u_des, W);
+    force_opt_.updateObjective(com_dynamics_.getK(), com_dynamics_.getU(), W);
 
     // 제약: 양발 접촉 (스윙 없음)
     Eigen::Vector2d contact(1.0, 1.0);

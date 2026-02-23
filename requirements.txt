@@ -4,31 +4,36 @@
 # conda activate frjoco
 # pip install -r requirements.txt
 
+#chmod +x ~/FrJoCo/C++/build.sh
+#./build.sh
+#chmod +x C++/run.sh
+
+
 # ── PyTorch (CUDA 12.6) ──
---extra-index-url https://download.pytorch.org/whl/cu126
-torch>=2.7.0
+#--extra-index-url https://download.pytorch.org/whl/cu126
+#torch>=2.7.0
 
 # ── MuJoCo + MuJoCo-Warp ──
 mujoco>=3.5.0
-mujoco-warp>=3.5.0
+#mujoco-warp>=3.5.0
 
 # ── NVIDIA Warp ──
---extra-index-url https://pypi.nvidia.com
-warp-lang>=1.12.0.dev
+#--extra-index-url https://pypi.nvidia.com
+#warp-lang>=1.12.0.dev
 
 # ── mjlab ──
-mjlab>=1.1.0
+#mjlab>=1.1.0
 
 # ── QP solver (로컬: pip install -e ReLUQP-py/) ──
--e ./ReLUQP-py
+#-e ./ReLUQP-py
 
 # ── pinocchio ──
 pin
 
 # ── 수치/과학 ──
-numpy
-scipy
+#numpy
+#scipy
 
 # ── 유틸리티 ──
-matplotlib
-tqdm
+#matplotlib
+#tqdm

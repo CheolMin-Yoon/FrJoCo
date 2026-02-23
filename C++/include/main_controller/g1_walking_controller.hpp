@@ -16,6 +16,7 @@
 #include "constraints/friction_cone.hpp"
 #include "constraints/cop_limits.hpp"
 #include "whole_body_controller/tasks/balance_task.hpp"
+#include "dynamics_model/com_dynamics.hpp"
 
 class G1WalkingController {
 public:
@@ -105,6 +106,7 @@ private:
     FrictionCone            fric_cone_;
     CoPLimits               cop_limits_;
     BalanceTask             balance_task_;
+    CenterOfMass            com_dynamics_;
 
     std::vector<Eigen::Vector2d> footsteps_;
 

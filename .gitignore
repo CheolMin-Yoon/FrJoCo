@@ -1,0 +1,16 @@
+# C++ build
+C++/build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# 모델 메시 (용량 큰 경우)
+# model/meshes/
+
+# 에디터
+.vscode/
+.idea/
+*.swp

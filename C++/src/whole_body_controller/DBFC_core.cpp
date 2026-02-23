@@ -1,11 +1,12 @@
 #include "whole_body_controller/DBFC_core.hpp"
+#include <pinocchio/algorithm/center-of-mass.hpp>
 
-WBC::WBC(int nv, int na, int nc)
+WBC::WBC(const pinocchio::Model& model, int nv, int na, int nc)
     : nv_(nv), na_(na), nc_(nc),
       ik_(nv, na),
-      balance_task_(100.0, 20.0),   // Kp, Kd for CoM PD
-      com_dynamics_(ROBOT_MASS, GRAVITY),
-      force_qp_(nc, 18),            // 12 vars, 18 ineq constraints
+      balance_task_(100.0, 20.0),
+      com_dynamics_(pinocchio::computeTotalMass(model), GRAVITY),
+      force_qp_(nc, 18),
       torque_gen_(nv, na, nc)
 {
 }
